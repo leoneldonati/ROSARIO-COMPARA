@@ -31,9 +31,9 @@ async function seed() {
   console.log(`Usuarios creados: ${Object.keys(users.insertedIds).length}`);
 
   const [p1, p2, p3] = [
-    users.insertedIds[0].toString(),
-    users.insertedIds[1].toString(),
-    users.insertedIds[2].toString(),
+    users.insertedIds[0],
+    users.insertedIds[1],
+    users.insertedIds[2],
   ];
 
   // ─── PERFILES PROVEEDORES ────────────────────────────────
@@ -57,20 +57,20 @@ async function seed() {
   console.log(`Perfiles de proveedor creados: ${Object.keys(supplierProfiles.insertedIds).length}`);
 
   const [sp1, sp2, sp3] = [
-    supplierProfiles.insertedIds[0].toString(),
-    supplierProfiles.insertedIds[1].toString(),
-    supplierProfiles.insertedIds[2].toString(),
+    supplierProfiles.insertedIds[0],
+    supplierProfiles.insertedIds[1],
+    supplierProfiles.insertedIds[2],
   ];
 
   // ─── PERFILES CLIENTES ───────────────────────────────────
   await mongoose.connection.collection("clientprofiles").insertMany([
     {
-      userId: users.insertedIds[3].toString(), direccion: "Bartolomé Mitre 1234", ciudad: "CABA",
+      userId: users.insertedIds[3], direccion: "Bartolomé Mitre 1234", ciudad: "CABA",
       provincia: "Buenos Aires", codigoPostal: "1039", cuit: "30-12345678-9",
       razonSocial: "Bar El Clásico SRL", tipoLocal: "Bar", horarioEntrega: "9 a 14 hs",
     },
     {
-      userId: users.insertedIds[4].toString(), direccion: "Av. Corrientes 5678", ciudad: "CABA",
+      userId: users.insertedIds[4], direccion: "Av. Corrientes 5678", ciudad: "CABA",
       provincia: "Buenos Aires", codigoPostal: "1043", cuit: "30-87654321-0",
       razonSocial: "Restaurante La Esquina SA", tipoLocal: "Restaurante", horarioEntrega: "10 a 17 hs",
     },

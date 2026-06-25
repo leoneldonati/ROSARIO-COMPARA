@@ -30,7 +30,7 @@ export default function DashboardInicio({ loaderData }: Route.ComponentProps) {
           <>
             <Link
               to="/dashboard/productos"
-              className="bg-white rounded-2xl p-8 shadow-md hover:shadow-lg transition"
+              className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover:shadow-lg transition"
             >
               <span className="text-4xl block mb-4">📦</span>
               <h3 className="text-xl font-bold text-amber-900 mb-2">Mis Productos</h3>
@@ -40,7 +40,7 @@ export default function DashboardInicio({ loaderData }: Route.ComponentProps) {
             </Link>
             <Link
               to="/dashboard/mi-perfil"
-              className="bg-white rounded-2xl p-8 shadow-md hover:shadow-lg transition"
+              className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover:shadow-lg transition"
             >
               <span className="text-4xl block mb-4">👤</span>
               <h3 className="text-xl font-bold text-amber-900 mb-2">Mi Perfil</h3>
@@ -53,7 +53,7 @@ export default function DashboardInicio({ loaderData }: Route.ComponentProps) {
           <>
             <Link
               to="/dashboard/buscar"
-              className="bg-white rounded-2xl p-8 shadow-md hover:shadow-lg transition"
+              className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover:shadow-lg transition"
             >
               <span className="text-4xl block mb-4">🔍</span>
               <h3 className="text-xl font-bold text-amber-900 mb-2">Buscar Productos</h3>
@@ -63,7 +63,7 @@ export default function DashboardInicio({ loaderData }: Route.ComponentProps) {
             </Link>
             <Link
               to="/dashboard/mi-perfil"
-              className="bg-white rounded-2xl p-8 shadow-md hover:shadow-lg transition"
+              className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover:shadow-lg transition"
             >
               <span className="text-4xl block mb-4">👤</span>
               <h3 className="text-xl font-bold text-amber-900 mb-2">Mi Perfil</h3>

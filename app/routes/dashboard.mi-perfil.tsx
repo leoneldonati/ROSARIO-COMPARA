@@ -94,7 +94,7 @@ export default function MiPerfil({ loaderData }: Route.ComponentProps) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-amber-800 mb-1">Costo de envío ($)</label>
               <input
@@ -144,7 +144,7 @@ export default function MiPerfil({ loaderData }: Route.ComponentProps) {
     <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-amber-900 mb-6">Perfil de Cliente</h2>
       <Form method="post" className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-amber-800 mb-1">Dirección</label>
             <input

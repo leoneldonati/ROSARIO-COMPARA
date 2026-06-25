@@ -19,6 +19,7 @@ export default [
       route("productos/:id/editar", "routes/dashboard.productos.$id.editar.tsx"),
       route("buscar", "routes/dashboard.buscar.tsx"),
       route("producto/:id/comparar", "routes/dashboard.producto.$id.comparar.tsx"),
+      route("proveedor/:id", "routes/dashboard.proveedor.$id.tsx"),
     ]),
   ]),
 ] satisfies RouteConfig;

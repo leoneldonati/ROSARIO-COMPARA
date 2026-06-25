@@ -38,8 +38,8 @@ export default function MisProductos({ loaderData }: Route.ComponentProps) {
       </div>
 
       {productos.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center shadow-md">
-          <p className="text-amber-600 text-lg mb-4">Todavía no cargaste productos.</p>
+        <div className="bg-white rounded-2xl p-6 sm:p-12 text-center shadow-md">
+          <p className="text-amber-600 text-base sm:text-lg mb-4">Todavía no cargaste productos.</p>
           <Link
             to="/dashboard/productos/nuevo"
             className="text-amber-800 font-semibold hover:underline"
@@ -52,7 +52,7 @@ export default function MisProductos({ loaderData }: Route.ComponentProps) {
           {productos.map((p) => (
             <div
               key={p._id.toString()}
-              className="bg-white rounded-xl p-5 shadow-sm flex items-center justify-between"
+              className="bg-white rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <div>
                 <h3 className="font-semibold text-amber-900 text-lg">{p.nombre}</h3>

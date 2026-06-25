@@ -3,9 +3,14 @@ import { execSync, spawn } from "child_process";
 import { existsSync } from "fs";
 
 function cmd(name: string): string {
-  const local = `node_modules\\.bin\\${name}.cmd`;
+  if (process.platform === "win32") {
+    const local = `node_modules\\.bin\\${name}.cmd`;
+    if (existsSync(local)) return local;
+    return `${name}.cmd`;
+  }
+  const local = `node_modules/.bin/${name}`;
   if (existsSync(local)) return local;
-  return `${name}.cmd`;
+  return `npx ${name}`;
 }
 
 async function main() {
