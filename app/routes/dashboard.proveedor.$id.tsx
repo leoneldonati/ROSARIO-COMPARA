@@ -11,10 +11,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   await connectDB();
 
   const perfil = await SupplierProfile.findById(params.id).lean();
-  if (!perfil) throw new Error("Proveedor no encontrado");
+  if (!perfil) throw new Response("Proveedor no encontrado", { status: 404 });
 
   const usuario = await User.findById(perfil.userId).select("nombre email telefono").lean();
-  if (!usuario) throw new Error("Usuario no encontrado");
+  if (!usuario) throw new Response("Usuario no encontrado", { status: 404 });
 
   const productos = await Product.find({ supplierId: perfil._id, stock: true })
     .sort({ categoria: 1, precio: 1 })
@@ -56,7 +56,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: `${(loaderData as any).usuario.nombre} - Proveedores App` }];
+  return [{ title: `${loaderData.usuario.nombre} - Proveedores App` }];
 }
 
 export default function ProveedorPerfil({ loaderData }: Route.ComponentProps) {
@@ -127,15 +127,16 @@ export default function ProveedorPerfil({ loaderData }: Route.ComponentProps) {
       )}
 
       <h3 className="text-xl font-bold text-amber-900 mb-6">
-        Productos ({categorias.reduce((s: number, c: any) => s + c.productos.length, 0)})
+        Productos ({categorias.reduce((s: number, c) => s + c.productos.length, 0)})
       </h3>
 
       <div className="space-y-6">
-        {categorias.map((cat: any) => (
+        {categorias.map((cat) => (
           <div key={cat.nombre}>
             <h4 className="text-lg font-semibold text-amber-800 mb-3">{cat.nombre}</h4>
             <div className="overflow-x-auto">
-              <table className="w-full bg-white rounded-2xl shadow-md overflow-hidden">
+              <table className="w-full bg-white rounded-2xl shadow-md overflow-hidden" aria-label={`Productos de ${cat.nombre}`}>
+                <caption className="sr-only">Lista de productos en la categoría {cat.nombre}</caption>
                 <thead className="bg-amber-100 text-amber-800">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium">Producto</th>
@@ -145,7 +146,7 @@ export default function ProveedorPerfil({ loaderData }: Route.ComponentProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {cat.productos.map((p: any, i: number) => (
+                  {cat.productos.map((p, i) => (
                     <tr
                       key={p._id}
                       className={i % 2 === 0 ? "bg-white" : "bg-amber-50"}

@@ -95,8 +95,80 @@ async function seed() {
     { supplierId: sp1, nombre: "Harina 000", categoria: "Harinas", precio: 400, unidad: "kg", descripcion: "Harina de trigo 000, ideal para panadería.", stock: true, createdAt: new Date() },
   ];
 
-  await mongoose.connection.collection("products").insertMany(productos);
+  const createdProducts = await mongoose.connection.collection("products").insertMany(productos);
+  const productIds = Object.values(createdProducts.insertedIds);
   console.log(`Productos creados: ${productos.length}`);
+
+  // ─── CARRITO ──────────────────────────────────────────────
+  await mongoose.connection.collection("carts").insertOne({
+    clientId: users.insertedIds[3],
+    items: [
+      { productId: productIds[0], cantidad: 2 },
+      { productId: productIds[8], cantidad: 5 },
+      { productId: productIds[3], cantidad: 1 },
+    ],
+    updatedAt: new Date(),
+  });
+  console.log("Carrito creado para cliente1");
+
+  // ─── FAVORITOS ────────────────────────────────────────────
+  await mongoose.connection.collection("clientprofiles").updateOne(
+    { userId: users.insertedIds[3] },
+    { $set: { favoritos: [productIds[0], productIds[10], productIds[13]] } }
+  );
+  console.log("Favoritos creados para cliente1");
+
+  // ─── PEDIDOS ──────────────────────────────────────────────
+  const now = new Date();
+  const hace3dias = new Date(now.getTime() - 3 * 86400000);
+  const hace2dias = new Date(now.getTime() - 2 * 86400000);
+  const hace1dia = new Date(now.getTime() - 86400000);
+
+  await mongoose.connection.collection("orders").insertMany([
+    {
+      clientId: users.insertedIds[3],
+      supplierId: sp1,
+      items: [
+        { productId: productIds[0], nombre: "Queso Muzzarella", precio: 4800, unidad: "kg", cantidad: 3, subtotal: 14400 },
+        { productId: productIds[8], nombre: "Aceite de Girasol", precio: 1300, unidad: "litro", cantidad: 6, subtotal: 7800 },
+      ],
+      total: 22200,
+      direccionEntrega: { direccion: "Bartolomé Mitre 1234", ciudad: "CABA", provincia: "Buenos Aires", codigoPostal: "1039" },
+      estado: "entregado",
+      notas: "",
+      createdAt: hace3dias,
+      updatedAt: hace2dias,
+    },
+    {
+      clientId: users.insertedIds[3],
+      supplierId: sp2,
+      items: [
+        { productId: productIds[1], nombre: "Queso Muzzarella", precio: 5200, unidad: "kg", cantidad: 2, subtotal: 10400 },
+        { productId: productIds[11], nombre: "Pollo Entero", precio: 3000, unidad: "kg", cantidad: 5, subtotal: 15000 },
+      ],
+      total: 25400,
+      direccionEntrega: { direccion: "Bartolomé Mitre 1234", ciudad: "CABA", provincia: "Buenos Aires", codigoPostal: "1039" },
+      estado: "pendiente",
+      notas: "",
+      createdAt: hace1dia,
+      updatedAt: hace1dia,
+    },
+    {
+      clientId: users.insertedIds[4],
+      supplierId: sp1,
+      items: [
+        { productId: productIds[4], nombre: "Jamón Cocido", precio: 3900, unidad: "kg", cantidad: 2, subtotal: 7800 },
+        { productId: productIds[5], nombre: "Carne Picada", precio: 3800, unidad: "kg", cantidad: 4, subtotal: 15200 },
+      ],
+      total: 23000,
+      direccionEntrega: { direccion: "Av. Corrientes 5678", ciudad: "CABA", provincia: "Buenos Aires", codigoPostal: "1043" },
+      estado: "confirmado",
+      notas: "Entregar antes de las 12",
+      createdAt: hace2dias,
+      updatedAt: hace2dias,
+    },
+  ]);
+  console.log("Pedidos creados: 3");
 
   console.log("\n✅ Seed completado exitosamente");
   console.log("\nUsuarios de prueba (password: 123456):");

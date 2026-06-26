@@ -1,8 +1,19 @@
 import jwt from "jsonwebtoken";
 import { createCookieSessionStorage, redirect } from "react-router";
+import User from "./models/user.server";
 import type { UserI } from "./models/user.server";
 
-const SECRET = process.env.JWT_SECRET || "dev-secret";
+const SECRET: string = process.env.JWT_SECRET ?? "";
+if (!SECRET) {
+  throw new Error("JWT_SECRET environment variable is required");
+}
+
+export type SafeUser = Omit<UserI, "password">;
+
+export function sanitizeUser(user: UserI): SafeUser {
+  const { password: _, ...safe } = user;
+  return safe;
+}
 
 export function createToken(user: { _id: string; email: string; role: string }) {
   return jwt.sign({ _id: user._id, email: user.email, role: user.role }, SECRET, {
@@ -11,7 +22,7 @@ export function createToken(user: { _id: string; email: string; role: string }) 
 }
 
 export function verifyToken(token: string) {
-  return jwt.verify(token, SECRET) as { _id: string; email: string; role: string };
+  return jwt.verify(token, SECRET) as unknown as { _id: string; email: string; role: string };
 }
 
 type SessionData = {
@@ -43,18 +54,17 @@ export async function getSession(request: Request) {
 export async function requireUser(
   request: Request,
   roles?: string[]
-): Promise<UserI> {
+): Promise<SafeUser> {
   const session = await getSession(request);
   const token = session.get("token");
   if (!token) throw redirect("/iniciar-sesion");
 
   try {
     const payload = verifyToken(token);
-    const { default: User } = await import("./models/user.server");
-    const user = await User.findById(payload._id).lean();
+    const user = await User.findById(payload._id).select("-password").lean();
     if (!user) throw redirect("/iniciar-sesion");
     if (roles && !roles.includes(user.role)) throw redirect("/dashboard");
-    return user as unknown as UserI;
+    return user as unknown as SafeUser;
   } catch {
     throw redirect("/iniciar-sesion");
   }

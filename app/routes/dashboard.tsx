@@ -17,6 +17,8 @@ const navItems = [
   { to: "/dashboard/mi-perfil", label: "Mi Perfil", icon: "👤", roles: ["CLIENTE", "PROVEEDOR"] },
   { to: "/dashboard/productos", label: "Mis Productos", icon: "📦", roles: ["PROVEEDOR"] },
   { to: "/dashboard/buscar", label: "Buscar Productos", icon: "🔍", roles: ["CLIENTE"] },
+  { to: "/dashboard/carrito", label: "Carrito", icon: "🛒", roles: ["CLIENTE"] },
+  { to: "/dashboard/pedidos", label: "Pedidos", icon: "📋", roles: ["CLIENTE", "PROVEEDOR"] },
 ];
 
 export default function Dashboard({ loaderData }: Route.ComponentProps) {

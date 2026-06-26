@@ -5,11 +5,20 @@ import { requireUser } from "~/lib/auth.server";
 import Product from "~/lib/models/product.server";
 import SupplierProfile from "~/lib/models/supplier-profile.server";
 import User from "~/lib/models/user.server";
+import ClientProfile from "~/lib/models/client-profile.server";
+import Cart from "~/lib/models/cart.server";
 import { calcularScoreProveedoresCategoria } from "~/lib/scoring.server";
+import type { SupplierCategoryInput } from "~/lib/scoring.server";
+import type { ProveedorCategoriaScore } from "~/lib/scoring.shared";
 import { PESOS_DEFAULT, BADGE_COLORS } from "~/lib/scoring.shared";
+import { escapeRegex } from "~/lib/utils";
 
-export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request, ["CLIENTE"]);
+export async function loader({ request }: Route.LoaderArgs): Promise<{
+  q: string; precioMin: number; precioMax: number; zona: string; orden: string;
+  categorias: { nombre: string; proveedores: ProveedorCategoriaScore[] }[];
+  favoritos: string[];
+}> {
+  const currentUser = await requireUser(request, ["CLIENTE"]);
   await connectDB();
 
   const url = new URL(request.url);
@@ -19,19 +28,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   const zona = url.searchParams.get("zona") || "";
   const orden = url.searchParams.get("orden") || "precio_asc";
 
-  const filter: any = { stock: true };
+  const filter: Record<string, unknown> = { stock: true };
 
   if (q) {
-    const regex = new RegExp(q, "i");
+    const regex = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ nombre: regex }, { categoria: regex }];
   }
-  if (precioMin > 0) filter.precio = { ...filter.precio, $gte: precioMin };
-  if (precioMax > 0) filter.precio = { ...filter.precio, $lte: precioMax };
+  if (precioMin > 0) filter.precio = { $gte: precioMin };
+  if (precioMax > 0) {
+    const existing = filter.precio as Record<string, unknown> | undefined;
+    filter.precio = { ...(existing || {}), $lte: precioMax };
+  }
 
   const sortOrder = orden === "precio_asc" ? 1 : -1;
   let productos: any[] = await Product.find(filter).sort({ precio: sortOrder }).lean();
 
-  if (!productos.length) return { q, precioMin, precioMax, zona, orden, categorias: [] };
+  const profile = await ClientProfile.findOne({ userId: currentUser._id }).lean();
+  const favoritos: string[] = profile
+    ? profile.favoritos.map((f: any) => f.toString())
+    : [];
+
+  if (!productos.length) return { q, precioMin, precioMax, zona, orden, categorias: [], favoritos };
 
   const supplierIds = [...new Set(productos.map((p) => p.supplierId.toString()))];
   const perfiles = await SupplierProfile.find({ _id: { $in: supplierIds }, activo: true }).lean();
@@ -48,7 +65,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
 
-  const groupedByCategory = new Map<string, Map<string, any>>();
+  const groupedByCategory = new Map<string, Map<string, SupplierCategoryInput>>();
   for (const p of productos) {
     const cat = p.categoria || "Sin categoría";
     if (!groupedByCategory.has(cat)) groupedByCategory.set(cat, new Map());
@@ -69,13 +86,16 @@ export async function loader({ request }: Route.LoaderArgs) {
         productos: [],
       });
     }
-    catMap.get(sid)!.productos.push({
-      _id: p._id.toString(),
-      nombre: p.nombre,
-      precio: p.precio,
-      unidad: p.unidad,
-      descripcion: p.descripcion,
-    });
+    const entry = catMap.get(sid);
+    if (entry) {
+      entry.productos.push({
+        _id: p._id.toString(),
+        nombre: p.nombre,
+        precio: p.precio,
+        unidad: p.unidad,
+        descripcion: p.descripcion,
+      });
+    }
   }
 
   const rawPesos: Record<string, string | undefined> = {
@@ -96,7 +116,46 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-  return { q, precioMin, precioMax, zona, orden, categorias };
+  return { q, precioMin, precioMax, zona, orden, categorias, favoritos };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser(request, ["CLIENTE"]);
+  await connectDB();
+  const form = await request.formData();
+  const _action = form.get("_action") as string;
+
+  if (_action === "add-cart") {
+    const productId = form.get("productId") as string;
+    const cantidad = Math.max(1, Number(form.get("cantidad")) || 1);
+    await Cart.findOneAndUpdate(
+      { clientId: user._id },
+      { $pull: { items: { productId } } }
+    );
+    await Cart.findOneAndUpdate(
+      { clientId: user._id },
+      { $push: { items: { productId, cantidad } }, $set: { updatedAt: new Date() } },
+      { upsert: true }
+    );
+    return null;
+  }
+
+  if (_action === "toggle-favorite") {
+    const productId = form.get("productId") as string;
+    const profile = await ClientProfile.findOne({ userId: user._id });
+    if (profile) {
+      const idx = profile.favoritos.findIndex((f: any) => f.toString() === productId);
+      if (idx >= 0) {
+        profile.favoritos.splice(idx, 1);
+      } else {
+        profile.favoritos.push(productId as any);
+      }
+      await profile.save();
+    }
+    return null;
+  }
+
+  return null;
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -113,7 +172,8 @@ function Estrellas({ count }: { count: number }) {
 }
 
 export default function Buscar({ loaderData }: Route.ComponentProps) {
-  const { q, precioMin, precioMax, zona, orden, categorias } = loaderData;
+  const { q, precioMin, precioMax, zona, orden, categorias, favoritos } = loaderData;
+  const favSet = new Set(favoritos);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPesos = {
@@ -255,7 +315,7 @@ export default function Buscar({ loaderData }: Route.ComponentProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {cat.proveedores.map((pv: any, i: number) => {
+                    {cat.proveedores.map((pv: ProveedorCategoriaScore, i: number) => {
                       const isBest = i === 0;
                       return (
                         <tr
@@ -310,11 +370,38 @@ export default function Buscar({ loaderData }: Route.ComponentProps) {
                               <summary className="cursor-pointer text-sm font-medium text-amber-800 hover:text-amber-600">
                                 {pv.productos.length} producto{pv.productos.length !== 1 ? "s" : ""}
                               </summary>
-                              <ul className="mt-2 space-y-1 text-sm">
-                                {pv.productos.map((pr: any) => (
-                                  <li key={pr._id} className="flex justify-between gap-4">
-                                    <span>{pr.nombre}</span>
+                              <ul className="mt-2 space-y-2 text-sm">
+                                {pv.productos.map((pr) => (
+                                  <li key={pr._id} className="flex flex-wrap items-center gap-2">
+                                    <span className="flex-1 min-w-[120px]">{pr.nombre}</span>
                                     <span className="font-semibold text-amber-800">${pr.precio} / {pr.unidad}</span>
+                                    <Form method="post" className="flex items-center gap-1">
+                                      <input type="hidden" name="_action" value="add-cart" />
+                                      <input type="hidden" name="productId" value={pr._id} />
+                                      <input
+                                        type="number"
+                                        name="cantidad"
+                                        min="1"
+                                        defaultValue="1"
+                                        className="w-12 px-1 py-0.5 border border-amber-200 rounded text-xs text-center"
+                                      />
+                                      <button
+                                        type="submit"
+                                        className="text-xs bg-amber-700 text-white px-2 py-1 rounded hover:bg-amber-800 transition"
+                                      >
+                                        + Carrito
+                                      </button>
+                                    </Form>
+                                    <Form method="post">
+                                      <input type="hidden" name="_action" value="toggle-favorite" />
+                                      <input type="hidden" name="productId" value={pr._id} />
+                                      <button
+                                        type="submit"
+                                        className="text-lg leading-none hover:scale-110 transition"
+                                      >
+                                        {favSet.has(pr._id) ? "★" : "☆"}
+                                      </button>
+                                    </Form>
                                   </li>
                                 ))}
                               </ul>

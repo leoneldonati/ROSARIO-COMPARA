@@ -9,7 +9,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request, ["PROVEEDOR"]);
   await connectDB();
   const perfil = await SupplierProfile.findOne({ userId: user._id });
-  if (!perfil) throw new Error("Perfil de proveedor no encontrado");
+  if (!perfil) throw new Response("Perfil de proveedor no encontrado", { status: 404 });
 
   const productos = await Product.find({ supplierId: perfil._id })
     .sort({ createdAt: -1 })

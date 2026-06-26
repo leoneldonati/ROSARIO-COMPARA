@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 export interface UserI {
   _id: string;
   email: string;
-  password: string;
+  password?: string;
   role: "CLIENTE" | "PROVEEDOR";
   nombre: string;
   telefono: string;

@@ -11,6 +11,7 @@ export interface ClientProfileI {
   razonSocial: string;
   tipoLocal: string;
   horarioEntrega: string;
+  favoritos: mongoose.Types.ObjectId[];
 }
 
 const clientProfileSchema = new mongoose.Schema<ClientProfileI>({
@@ -23,6 +24,7 @@ const clientProfileSchema = new mongoose.Schema<ClientProfileI>({
   razonSocial: { type: String, default: "" },
   tipoLocal: { type: String, default: "" },
   horarioEntrega: { type: String, default: "" },
+  favoritos: { type: [mongoose.Schema.Types.ObjectId], ref: "Product", default: [] },
 });
 
 const ClientProfile =

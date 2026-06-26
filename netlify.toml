@@ -2,7 +2,11 @@
   command = "npm run build"
   publish = "build/client"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# Para SSR en Netlify se necesita un adaptador serverless.
+# Instalar: npm i @netlify/functions
+# Crear: netlify/functions/server.ts con createRequestHandler
+# Más info: https://reactrouter.com/how-to/netlify
+#
+# Mientras tanto, para desarrollo local:
+#   npm run dev    → usa MongoDB Atlas
+#   npm run mock   → usa MongoDB en memoria + datos seed

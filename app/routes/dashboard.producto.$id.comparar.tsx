@@ -6,14 +6,19 @@ import Product from "~/lib/models/product.server";
 import SupplierProfile from "~/lib/models/supplier-profile.server";
 import User from "~/lib/models/user.server";
 import { calcularScoreProveedoresCategoria } from "~/lib/scoring.server";
+import type { SupplierCategoryInput } from "~/lib/scoring.server";
+import type { ProveedorCategoriaScore } from "~/lib/scoring.shared";
 import { PESOS_DEFAULT, BADGE_COLORS } from "~/lib/scoring.shared";
+import { escapeRegex } from "~/lib/utils";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireUser(request, ["CLIENTE"]);
   await connectDB();
 
+  if (!params.id) throw new Response("ID de producto no especificado", { status: 400 });
+
   const producto = await Product.findById(params.id).lean();
-  if (!producto) throw new Error("Producto no encontrado");
+  if (!producto) throw new Response("Producto no encontrado", { status: 404 });
 
   const categoria = producto.categoria;
   if (!categoria) {
@@ -26,7 +31,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const productos = await Product.find({
-    categoria: { $regex: new RegExp(`^${categoria.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    categoria: { $regex: new RegExp(`^${escapeRegex(categoria)}$`, "i") },
     stock: true,
   })
     .sort({ precio: 1 })
@@ -39,7 +44,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const usuarios = await User.find({ _id: { $in: userIds } }).select("nombre email telefono").lean();
   const usuariosMap = new Map(usuarios.map((u) => [u._id.toString(), u]));
 
-  const grouped = new Map<string, any>();
+  const grouped = new Map<string, SupplierCategoryInput>();
   for (const p of productos) {
     const sid = p.supplierId.toString();
     if (!grouped.has(sid)) {
@@ -57,13 +62,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         productos: [],
       });
     }
-    grouped.get(sid)!.productos.push({
-      _id: p._id.toString(),
-      nombre: p.nombre,
-      precio: p.precio,
-      unidad: p.unidad,
-      descripcion: p.descripcion,
-    });
+    const entry = grouped.get(sid);
+    if (entry) {
+      entry.productos.push({
+        _id: p._id.toString(),
+        nombre: p.nombre,
+        precio: p.precio,
+        unidad: p.unidad,
+        descripcion: p.descripcion,
+      });
+    }
   }
 
   const url = new URL(request.url);
@@ -89,7 +97,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: `Comparar: ${(loaderData as any).producto.nombre} - Proveedores App` }];
+  return [{ title: `Comparar: ${loaderData.producto.nombre} - Proveedores App` }];
 }
 
 function Estrellas({ count }: { count: number }) {
@@ -181,7 +189,8 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full bg-white rounded-2xl shadow-md overflow-hidden">
+          <table className="w-full bg-white rounded-2xl shadow-md overflow-hidden" aria-label="Comparativa de proveedores">
+            <caption className="sr-only">Comparación de precios y beneficios entre proveedores para {producto.nombre}</caption>
             <thead className="bg-amber-800 text-white">
               <tr>
                 <th className="px-4 py-3 text-left">Puntaje</th>
@@ -194,7 +203,7 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
               </tr>
             </thead>
             <tbody>
-              {proveedores.map((pv: any, i: number) => {
+              {proveedores.map((pv: ProveedorCategoriaScore, i: number) => {
                 const isBest = i === 0;
                 return (
                   <tr
@@ -250,7 +259,7 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
                           {pv.productos.length} producto{pv.productos.length !== 1 ? "s" : ""}
                         </summary>
                         <ul className="mt-2 space-y-1 text-sm">
-                          {pv.productos.map((pr: any) => (
+                          {pv.productos.map((pr) => (
                             <li key={pr._id} className="flex justify-between gap-4">
                               <span>{pr.nombre}</span>
                               <span className="font-semibold text-amber-800">${pr.precio} / {pr.unidad}</span>

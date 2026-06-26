@@ -6,13 +6,19 @@ function normalizarInverso(valor: number, min: number, max: number): number {
   return 1 - (valor - min) / (max - min);
 }
 
+function toValidNumber(val: string | undefined, fallback: number): number {
+  if (val === undefined) return fallback;
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 function parsePesos(raw: Record<string, string | undefined>): PesosScoring {
   const pesos: PesosScoring = { ...PESOS_DEFAULT };
-  if (raw.precio) pesos.precio = Math.max(0, Number(raw.precio));
-  if (raw.envio) pesos.envio = Math.max(0, Number(raw.envio));
-  if (raw.pedido) pesos.pedido = Math.max(0, Number(raw.pedido));
-  if (raw.beneficios) pesos.beneficios = Math.max(0, Number(raw.beneficios));
-  if (raw.cobertura) pesos.cobertura = Math.max(0, Number(raw.cobertura));
+  pesos.precio = toValidNumber(raw.precio, PESOS_DEFAULT.precio);
+  pesos.envio = toValidNumber(raw.envio, PESOS_DEFAULT.envio);
+  pesos.pedido = toValidNumber(raw.pedido, PESOS_DEFAULT.pedido);
+  pesos.beneficios = toValidNumber(raw.beneficios, PESOS_DEFAULT.beneficios);
+  pesos.cobertura = toValidNumber(raw.cobertura, PESOS_DEFAULT.cobertura);
   return pesos;
 }
 
@@ -122,7 +128,9 @@ export function calcularScoreProveedoresCategoria(
   }
 
   const preciosPromedio = suppliers.map(
-    (s) => s.productos.reduce((sum, p) => sum + p.precio, 0) / s.productos.length
+    (s) => (s.productos.length > 0
+      ? s.productos.reduce((sum, p) => sum + p.precio, 0) / s.productos.length
+      : 0)
   );
   const minPrecio = Math.min(...preciosPromedio);
   const maxPrecio = Math.max(...preciosPromedio);
@@ -140,8 +148,8 @@ export function calcularScoreProveedoresCategoria(
     variedad: { valor: -Infinity, id: "" },
   };
 
-  const resultados: ProveedorCategoriaScore[] = suppliers.map((s) => {
-    const precioPromedio = preciosPromedio[suppliers.indexOf(s)];
+  const resultados: ProveedorCategoriaScore[] = suppliers.map((s, index) => {
+    const precioPromedio = preciosPromedio[index];
     const sPrecio = normalizarInverso(precioPromedio, minPrecio, maxPrecio);
     const sVariedad =
       maxProductos > 0 ? s.productos.length / maxProductos : 0;
