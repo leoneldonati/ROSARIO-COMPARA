@@ -60,9 +60,9 @@ export interface ProveedorCategoriaScore {
 }
 
 export const BADGE_COLORS: Record<string, string> = {
-  "Mejor Precio": "bg-green-100 text-green-700 border-green-300",
-  "Mejor Envío": "bg-blue-100 text-blue-700 border-blue-300",
-  "Más Beneficios": "bg-orange-100 text-orange-700 border-orange-300",
-  "Mejor Opción": "bg-yellow-100 text-yellow-700 border-yellow-300",
-  "Mejor Variedad": "bg-purple-100 text-purple-700 border-purple-300",
+  "Mejor Precio": "bg-primary-100 text-primary-700 border-primary-300 dark:bg-primary-900 dark:text-primary-200 dark:border-primary-700",
+  "Mejor Envío": "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900 dark:text-blue-200 dark:border-blue-700",
+  "Más Beneficios": "bg-accent-100 text-accent-700 border-accent-300 dark:bg-accent-900 dark:text-accent-200 dark:border-accent-700",
+  "Mejor Opción": "bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700",
+  "Mejor Variedad": "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900 dark:text-purple-200 dark:border-purple-700",
 };

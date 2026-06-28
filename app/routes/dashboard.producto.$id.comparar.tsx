@@ -1,15 +1,21 @@
-import { Link, useLoaderData, useSearchParams } from "react-router";
+import { Link, useFetcher, useLoaderData, useSearchParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import type { Route } from "./+types/dashboard.producto.$id.comparar";
 import { connectDB } from "~/lib/db.server";
 import { requireUser } from "~/lib/auth.server";
 import Product from "~/lib/models/product.server";
 import SupplierProfile from "~/lib/models/supplier-profile.server";
 import User from "~/lib/models/user.server";
+import Cart from "~/lib/models/cart.server";
 import { calcularScoreProveedoresCategoria } from "~/lib/scoring.server";
 import type { SupplierCategoryInput } from "~/lib/scoring.server";
 import type { ProveedorCategoriaScore } from "~/lib/scoring.shared";
 import { PESOS_DEFAULT, BADGE_COLORS } from "~/lib/scoring.shared";
 import { escapeRegex } from "~/lib/utils";
+import { Button } from "~/components/Button";
+import { Spinner } from "~/components/Spinner";
+import { Stars } from "~/components/Stars";
+import { ShoppingCart } from "lucide-react";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireUser(request, ["CLIENTE"]);
@@ -96,22 +102,51 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: `Comparar: ${loaderData.producto.nombre} - Proveedores App` }];
+export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser(request, ["CLIENTE"]);
+  await connectDB();
+  const form = await request.formData();
+  const _action = form.get("_action") as string;
+
+  if (_action === "add-cart") {
+    const productId = form.get("productId") as string;
+    const cantidad = Math.max(1, Number(form.get("cantidad")) || 1);
+    await Cart.findOneAndUpdate(
+      { clientId: user._id },
+      { $pull: { items: { productId } } }
+    );
+    await Cart.findOneAndUpdate(
+      { clientId: user._id },
+      { $push: { items: { productId, cantidad } }, $set: { updatedAt: new Date() } },
+      { upsert: true }
+    );
+    return { ok: true, action: "add-cart" };
+  }
+
+  return null;
 }
 
-function Estrellas({ count }: { count: number }) {
-  return (
-    <span className="text-amber-500 whitespace-nowrap" title={`${count} / 5`}>
-      {"★".repeat(count)}
-      {"☆".repeat(5 - count)}
-    </span>
-  );
+export function meta({ loaderData }: Route.MetaArgs) {
+  return [{ title: `Comparar: ${loaderData.producto.nombre} - Proveedores App` }];
 }
 
 export default function Comparar({ loaderData }: Route.ComponentProps) {
   const { producto, categoria, proveedores, pesos } = loaderData;
   const [searchParams, setSearchParams] = useSearchParams();
+  const fetcher = useFetcher();
+  const submittingProduct = fetcher.state !== "idle"
+    ? fetcher.formData?.get("productId") as string
+    : null;
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) {
+      setToast("✓ Agregado al carrito");
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 2000);
+    }
+  }, [fetcher.state, fetcher.data]);
 
   const handleSlider = (key: string, value: number) => {
     const next = new URLSearchParams(searchParams);
@@ -133,20 +168,26 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-amber-900 mb-2">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium animate-pulse">
+          {toast}
+        </div>
+      )}
+
+      <h2 className="text-2xl font-bold text-primary-900 dark:text-primary-100 mb-2">
         Comparativa: {producto.nombre}
       </h2>
       {categoria && (
-        <p className="text-amber-500 mb-1">
-          Categoría: <span className="font-semibold">{categoria}</span>
+        <p className="text-slate-500 dark:text-slate-400 mb-1">
+          Categoría: <span className="font-semibold text-primary-800 dark:text-primary-200">{categoria}</span>
         </p>
       )}
-      <p className="text-amber-600 mb-6">
+      <p className="text-slate-600 dark:text-slate-400 mb-6">
         {proveedores.length} proveedor{proveedores.length !== 1 ? "es" : ""} encontrado{proveedores.length !== 1 ? "s" : ""}
       </p>
 
-      <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-md mb-6">
-        <h3 className="text-md font-semibold text-amber-800 mb-4">
+      <div className="bg-primary-50 dark:bg-slate-800 rounded-lg p-4 sm:p-6 mb-6">
+        <h3 className="text-md font-semibold text-primary-800 dark:text-primary-200 mb-4">
           Ajustar ponderación
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -158,8 +199,8 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
             ["cobertura", "Cobertura"],
           ] as const).map(([key, label]) => (
             <div key={key}>
-              <label className="block text-sm font-medium text-amber-700 mb-1">
-                {label}: <span className="font-bold">{currentPesos[key]}%</span>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                {label}: <span className="font-bold text-primary-600 dark:text-primary-400">{currentPesos[key]}%</span>
               </label>
               <input
                 type="range"
@@ -168,30 +209,25 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
                 step="5"
                 value={currentPesos[key]}
                 onChange={(e) => handleSlider(key, Number(e.target.value))}
-                className="w-full accent-amber-700"
+                className="w-full accent-primary-600"
               />
             </div>
           ))}
         </div>
         <div className="mt-4 flex gap-3">
-          <button
-            onClick={resetPesos}
-            className="px-4 py-2 text-sm rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition"
-          >
-            Restablecer
-          </button>
+          <Button variant="secondary" onClick={resetPesos}>Restablecer</Button>
         </div>
       </div>
 
       {proveedores.length === 0 ? (
-        <div className="bg-white rounded-2xl p-6 sm:p-12 text-center shadow-md">
-          <p className="text-amber-600 text-base sm:text-lg">No hay proveedores disponibles para esta categoría.</p>
+        <div className="bg-primary-50 dark:bg-slate-800 rounded-lg p-6 sm:p-12 text-center">
+          <p className="text-slate-600 dark:text-slate-400 text-base sm:text-lg">No hay proveedores disponibles para esta categoría.</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full bg-white rounded-2xl shadow-md overflow-hidden" aria-label="Comparativa de proveedores">
+          <table className="w-full bg-primary-50 dark:bg-slate-800 rounded-lg overflow-hidden" aria-label="Comparativa de proveedores">
             <caption className="sr-only">Comparación de precios y beneficios entre proveedores para {producto.nombre}</caption>
-            <thead className="bg-amber-800 text-white">
+            <thead className="bg-primary-800 dark:bg-primary-900 text-white">
               <tr>
                 <th className="px-4 py-3 text-left">Puntaje</th>
                 <th className="px-4 py-3 text-left">Proveedor</th>
@@ -210,23 +246,23 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
                     key={pv.supplierId}
                     className={
                       isBest
-                        ? "bg-green-50 border-b-2 border-green-300"
+                        ? "bg-primary-100 dark:bg-primary-900/50 border-b-2 border-primary-300 dark:border-primary-700"
                         : i % 2 === 0
-                          ? "bg-amber-50"
-                          : "bg-white"
+                          ? "bg-primary-50 dark:bg-slate-800"
+                          : "bg-white dark:bg-slate-800/50"
                     }
                   >
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start gap-1">
-                        <Estrellas count={pv.estrellas} />
-                        <span className="text-xs font-semibold text-amber-700">
+                        <Stars count={pv.estrellas} />
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                           {pv.score}
                         </span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {pv.badges.map((b: string) => (
                             <span
                               key={b}
-                              className={`text-xs px-2 py-0.5 rounded-full border ${BADGE_COLORS[b] || "bg-gray-100 text-gray-600 border-gray-200"}`}
+                              className={`text-xs px-2 py-0.5 rounded-full border ${BADGE_COLORS[b] || "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600"}`}
                             >
                               {b}
                             </span>
@@ -234,37 +270,59 @@ export default function Comparar({ loaderData }: Route.ComponentProps) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-medium text-amber-900">
+                    <td className="px-4 py-3 font-medium text-primary-900 dark:text-primary-100">
                       <Link
                         to={`/dashboard/proveedor/${pv.supplierId}`}
-                        className="hover:text-amber-600 hover:underline"
+                        className="hover:text-primary-600 dark:hover:text-primary-400 hover:underline"
                       >
                         {pv.proveedorNombre}
                       </Link>
-                      <div className="text-xs text-amber-500 mt-0.5">{pv.proveedorEmail}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{pv.proveedorEmail}</div>
                     </td>
-                    <td className="px-4 py-3 font-bold text-amber-800">
+                    <td className="px-4 py-3 font-bold text-primary-800 dark:text-primary-200">
                       ${pv.precioPromedio}
                     </td>
-                    <td className="px-4 py-3 text-amber-700">{pv.coberturaEntrega || "-"}</td>
-                    <td className="px-4 py-3 text-amber-700">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{pv.coberturaEntrega || "-"}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       {pv.costoEnvio > 0 ? `$${pv.costoEnvio}` : "Gratis"}
                     </td>
-                    <td className="px-4 py-3 text-amber-700">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       {pv.pedidoMinimo > 0 ? `$${pv.pedidoMinimo}` : "-"}
                     </td>
-                    <td className="px-4 py-3 text-amber-700">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       <details>
-                        <summary className="cursor-pointer text-sm font-medium text-amber-800 hover:text-amber-600">
+                        <summary className="cursor-pointer text-sm font-medium text-primary-800 dark:text-primary-200 hover:text-primary-600 dark:hover:text-primary-400">
                           {pv.productos.length} producto{pv.productos.length !== 1 ? "s" : ""}
                         </summary>
-                        <ul className="mt-2 space-y-1 text-sm">
-                          {pv.productos.map((pr) => (
-                            <li key={pr._id} className="flex justify-between gap-4">
-                              <span>{pr.nombre}</span>
-                              <span className="font-semibold text-amber-800">${pr.precio} / {pr.unidad}</span>
-                            </li>
-                          ))}
+                        <ul className="mt-2 space-y-2 text-sm">
+                          {pv.productos.map((pr) => {
+                            const isSubmitting = submittingProduct === pr._id;
+                            return (
+                              <li key={pr._id} className="flex flex-wrap items-center gap-2">
+                                <span className="flex-1 min-w-[120px]">{pr.nombre}</span>
+                                <span className="font-semibold text-primary-800 dark:text-primary-200">${pr.precio} / {pr.unidad}</span>
+                                <fetcher.Form method="post" className="flex items-center gap-1">
+                                  <input type="hidden" name="_action" value="add-cart" />
+                                  <input type="hidden" name="productId" value={pr._id} />
+                                  <input
+                                    type="number"
+                                    name="cantidad"
+                                    min="1"
+                                    defaultValue="1"
+                                    className="w-12 px-1 py-0.5 border border-slate-300 dark:border-slate-600 rounded text-xs text-center bg-white dark:bg-slate-800 dark:text-slate-100"
+                                  />
+                                  <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="inline-flex items-center gap-1 text-xs bg-accent-600 text-white px-2 py-1 rounded hover:bg-accent-700 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {isSubmitting ? <Spinner size={12} /> : <ShoppingCart className="w-3 h-3" />}
+                                    {isSubmitting ? "" : "+ Carrito"}
+                                  </button>
+                                </fetcher.Form>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </details>
                     </td>

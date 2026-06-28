@@ -1,4 +1,5 @@
-import { Form, Link, redirect, useActionData, useLoaderData } from "react-router";
+import { Link, redirect, useFetcher, useLoaderData } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import type { Route } from "./+types/dashboard.carrito";
 import { connectDB } from "~/lib/db.server";
 import { requireUser } from "~/lib/auth.server";
@@ -8,6 +9,11 @@ import SupplierProfile from "~/lib/models/supplier-profile.server";
 import User from "~/lib/models/user.server";
 import ClientProfile from "~/lib/models/client-profile.server";
 import Order from "~/lib/models/order.server";
+import { Button } from "~/components/Button";
+import { Card } from "~/components/Card";
+import { Spinner } from "~/components/Spinner";
+import { ConfirmDialog } from "~/components/ConfirmDialog";
+import { ShoppingCart, Trash2, ArrowLeft, AlertTriangle, ImageOff } from "lucide-react";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request, ["CLIENTE"]);
@@ -15,7 +21,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const cart = await Cart.findOne({ clientId: user._id }).lean();
   if (!cart || !cart.items.length) {
-    return { user, grupos: [], totalGeneral: 0 };
+    return { user, grupos: [], totalGeneral: 0, itemsCount: 0, proveedoresCount: 0 };
   }
 
   const productIds = cart.items.map((i: any) => i.productId);
@@ -30,6 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const usrMap = new Map(usuarios.map((u: any) => [u._id.toString(), u]));
 
   const gruposMap = new Map<string, any>();
+  let itemsCount = 0;
   for (const item of cart.items) {
     const prod: any = prodMap.get(item.productId.toString());
     if (!prod) continue;
@@ -56,14 +63,19 @@ export async function loader({ request }: Route.LoaderArgs) {
       unidad: prod.unidad,
       cantidad: item.cantidad,
       subtotal,
+      imagen: prod.imagen || "",
+      stock: prod.stock,
     });
     grupo.subtotal += subtotal;
+    itemsCount++;
   }
 
   const grupos = Array.from(gruposMap.values());
-  const totalGeneral = grupos.reduce((s: number, g: any) => s + g.subtotal, 0);
+  const proveedoresCount = grupos.length;
+  const totalGeneral = grupos.reduce((s: number, g: any) => s + g.subtotal + g.costoEnvio, 0);
+  const totalSinEnvio = grupos.reduce((s: number, g: any) => s + g.subtotal, 0);
 
-  return { user, grupos, totalGeneral };
+  return { user, grupos, totalGeneral, totalSinEnvio, itemsCount, proveedoresCount };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -71,21 +83,6 @@ export async function action({ request }: Route.ActionArgs) {
   await connectDB();
   const form = await request.formData();
   const _action = form.get("_action") as string;
-
-  if (_action === "add") {
-    const productId = form.get("productId") as string;
-    const cantidad = Math.max(1, Number(form.get("cantidad")) || 1);
-    await Cart.findOneAndUpdate(
-      { clientId: user._id },
-      { $pull: { items: { productId } } }
-    );
-    await Cart.findOneAndUpdate(
-      { clientId: user._id },
-      { $push: { items: { productId, cantidad } }, $set: { updatedAt: new Date() } },
-      { upsert: true }
-    );
-    return null;
-  }
 
   if (_action === "update") {
     const productId = form.get("productId") as string;
@@ -103,7 +100,12 @@ export async function action({ request }: Route.ActionArgs) {
       { clientId: user._id },
       { $pull: { items: { productId } }, $set: { updatedAt: new Date() } }
     );
-    return null;
+    return redirect("/dashboard/carrito");
+  }
+
+  if (_action === "clear") {
+    await Cart.deleteOne({ clientId: user._id });
+    return redirect("/dashboard/carrito");
   }
 
   if (_action === "checkout") {
@@ -174,7 +176,7 @@ export async function action({ request }: Route.ActionArgs) {
     await Order.insertMany(orders);
     await Cart.deleteOne({ clientId: user._id });
 
-    return { success: true, cantidad: orders.length };
+    return redirect("/dashboard/pedidos");
   }
 
   return null;
@@ -184,57 +186,93 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "Carrito - Proveedores App" }];
 }
 
-export default function Carrito({ loaderData, actionData }: Route.ComponentProps) {
-  const { grupos, totalGeneral } = loaderData;
+export default function Carrito({ loaderData }: Route.ComponentProps) {
+  const { grupos, totalGeneral, totalSinEnvio, itemsCount, proveedoresCount } = loaderData;
+  const checkoutFetcher = useFetcher();
+  const clearFetcher = useFetcher();
+  const checkoutLoading = checkoutFetcher.state !== "idle";
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hasSinStock = grupos.some((g: any) =>
+    g.items.some((i: any) => i.stock === false)
+  );
+
+  useEffect(() => {
+    if (clearFetcher.state === "idle" && clearFetcher.data) {
+      setToast("Carrito vaciado correctamente");
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 3000);
+    }
+  }, [clearFetcher.state, clearFetcher.data]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-amber-900">Carrito de Compras</h2>
+        <h2 className="text-2xl font-bold text-primary-900 dark:text-primary-100">Carrito de Compras</h2>
+        <Link
+          to="/dashboard/buscar"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200 transition"
+        >
+          <ArrowLeft className="w-4 h-4" /> Seguir comprando
+        </Link>
       </div>
 
-      {actionData?.success && (
-        <div className="bg-green-100 border border-green-400 text-green-800 px-4 py-3 rounded-xl mb-6">
-          ¡Pedido{actionData.cantidad > 1 ? "s" : ""} creado{actionData.cantidad > 1 ? "s" : ""} correctamente!
-          <Link to="/dashboard/pedidos" className="ml-2 underline font-medium">
-            Ver mis pedidos
-          </Link>
+      {toast && (
+        <div className="bg-green-50 dark:bg-green-900/50 border border-green-300 dark:border-green-700 text-green-800 dark:text-green-200 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
+          {toast}
         </div>
       )}
 
-      {actionData?.error && (
-        <div className="bg-red-100 border border-red-400 text-red-800 px-4 py-3 rounded-xl mb-6">
-          {actionData.error}
+      {checkoutFetcher.data?.error && (
+        <div className="bg-red-50 dark:bg-red-900/50 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 px-4 py-3 rounded-lg mb-6">
+          {checkoutFetcher.data.error}
         </div>
       )}
 
       {grupos.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center shadow-md">
-          <p className="text-amber-600 text-lg mb-4">Tu carrito está vacío</p>
+        <Card className="text-center py-12">
+          <ShoppingCart className="w-16 h-16 mx-auto mb-4 text-slate-300 dark:text-slate-600" />
+          <p className="text-slate-600 dark:text-slate-400 text-lg mb-2">Tu carrito está vacío</p>
+          <p className="text-slate-400 dark:text-slate-500 text-sm mb-6">
+            Explorá productos y agregalos para empezar a comparar
+          </p>
           <Link
             to="/dashboard/buscar"
-            className="inline-block px-6 py-3 bg-amber-700 text-white rounded-xl hover:bg-amber-800 transition font-medium"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition bg-accent-600 text-white hover:bg-accent-700"
           >
             Buscar productos
           </Link>
-        </div>
+        </Card>
       ) : (
         <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {itemsCount} producto{itemsCount !== 1 ? "s" : ""} de {proveedoresCount} proveedor{proveedoresCount !== 1 ? "es" : ""}
+            </p>
+            {hasSinStock && (
+              <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 font-medium">
+                <AlertTriangle className="w-3.5 h-3.5" /> Algunos productos no tienen stock
+              </span>
+            )}
+          </div>
+
           {grupos.map((grupo: any) => (
-            <div key={grupo.supplierId} className="bg-white rounded-2xl shadow-md overflow-hidden">
-              <div className="bg-amber-800 text-white px-6 py-4">
+            <div key={grupo.supplierId} className="bg-primary-50 dark:bg-slate-800 rounded-lg overflow-hidden">
+              <div className="bg-primary-800 dark:bg-primary-900 text-white px-6 py-4">
                 <Link
                   to={`/dashboard/proveedor/${grupo.supplierId}`}
-                  className="font-bold text-lg hover:text-amber-200 transition"
+                  className="font-bold text-lg hover:text-primary-200 transition"
                 >
                   {grupo.proveedorNombre}
                 </Link>
-                <div className="text-amber-200 text-sm">{grupo.proveedorEmail}</div>
+                <div className="text-primary-200 text-sm">{grupo.proveedorEmail}</div>
               </div>
               <div className="p-6">
                 <table className="w-full">
                   <thead>
-                    <tr className="text-left text-sm text-amber-600 border-b border-amber-200">
+                    <tr className="text-left text-sm text-slate-500 dark:text-slate-400 border-b border-slate-300 dark:border-slate-600">
                       <th className="pb-2 font-medium">Producto</th>
                       <th className="pb-2 font-medium">Precio</th>
                       <th className="pb-2 font-medium">Cantidad</th>
@@ -244,71 +282,159 @@ export default function Carrito({ loaderData, actionData }: Route.ComponentProps
                   </thead>
                   <tbody>
                     {grupo.items.map((item: any) => (
-                      <tr key={item.productId} className="border-b border-amber-100">
-                        <td className="py-3 text-amber-900 font-medium">{item.nombre}</td>
-                        <td className="py-3 text-amber-700">${item.precio} / {item.unidad}</td>
-                        <td className="py-3">
-                          <Form method="post" className="flex items-center gap-2">
-                            <input type="hidden" name="_action" value="update" />
-                            <input type="hidden" name="productId" value={item.productId} />
-                            <input
-                              type="number"
-                              name="cantidad"
-                              min="1"
-                              defaultValue={item.cantidad}
-                              className="w-16 px-2 py-1 border border-amber-200 rounded-lg text-center"
-                              onChange={(e) => e.target.form?.requestSubmit()}
-                            />
-                          </Form>
-                        </td>
-                        <td className="py-3 font-semibold text-amber-800">${item.subtotal}</td>
-                        <td className="py-3">
-                          <Form method="post">
-                            <input type="hidden" name="_action" value="remove" />
-                            <input type="hidden" name="productId" value={item.productId} />
-                            <button
-                              type="submit"
-                              className="text-red-500 hover:text-red-700 text-sm font-medium"
-                            >
-                              Eliminar
-                            </button>
-                          </Form>
-                        </td>
-                      </tr>
+                      <ItemRow key={item.productId} item={item} />
                     ))}
                   </tbody>
                 </table>
-                <div className="flex justify-between items-center mt-4 pt-4 border-t border-amber-200">
-                  <div className="text-sm text-amber-600">
-                    Envío: {grupo.costoEnvio > 0 ? `$${grupo.costoEnvio}` : "Gratis"}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-4 pt-4 border-t border-slate-300 dark:border-slate-600">
+                  <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
+                    <div>
+                      Envío: {grupo.costoEnvio > 0 ? `$${grupo.costoEnvio}` : "Gratis"}
+                    </div>
                     {grupo.pedidoMinimo > 0 && (
-                      <span className="ml-3">Pedido mínimo: ${grupo.pedidoMinimo}</span>
+                      <div className={grupo.subtotal < grupo.pedidoMinimo ? "text-red-500 dark:text-red-400 font-medium" : "text-green-600 dark:text-green-400"}>
+                        Pedido mínimo: ${grupo.pedidoMinimo}
+                        {grupo.subtotal < grupo.pedidoMinimo ? " (no alcanzado)" : " ✓"}
+                      </div>
                     )}
                   </div>
-                  <div className="text-lg font-bold text-amber-900">
-                    Subtotal: ${grupo.subtotal}
+                  <div className="text-right">
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                      Subtotal: ${grupo.subtotal}
+                    </div>
+                    {grupo.costoEnvio > 0 && (
+                      <div className="text-sm text-slate-500 dark:text-slate-400">
+                        Envío: ${grupo.costoEnvio}
+                      </div>
+                    )}
+                    <div className="text-lg font-bold text-primary-900 dark:text-primary-100">
+                      Total: ${grupo.subtotal + grupo.costoEnvio}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           ))}
 
-          <div className="bg-amber-900 text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="text-xl font-bold">
-              Total: ${totalGeneral}
+          <div className="bg-primary-800 dark:bg-primary-900 text-white rounded-lg p-6">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div>
+                {totalSinEnvio !== totalGeneral && (
+                  <div className="text-sm text-primary-200 mb-1">
+                    Subtotal: ${totalSinEnvio} + Envíos
+                  </div>
+                )}
+                <div className="text-xl font-bold">
+                  Total general: ${totalGeneral}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => setClearModalOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Vaciar
+                </Button>
+                <checkoutFetcher.Form method="post">
+                  <input type="hidden" name="_action" value="checkout" />
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={checkoutLoading || hasSinStock}
+                    className="px-8 py-3 text-lg"
+                  >
+                    {checkoutLoading ? <Spinner size={20} /> : null}
+                    {checkoutLoading ? "Creando pedidos..." : "Confirmar Pedido"}
+                  </Button>
+                </checkoutFetcher.Form>
+              </div>
             </div>
-            <Form method="post">
-              <input type="hidden" name="_action" value="checkout" />
-              <button
-                type="submit"
-                className="px-8 py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition text-lg"
-              >
-                Confirmar Pedido
-              </button>
-            </Form>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={clearModalOpen}
+        onClose={() => setClearModalOpen(false)}
+        onConfirm={() => {
+          clearFetcher.submit({ _action: "clear" }, { method: "post" });
+          setClearModalOpen(false);
+        }}
+        title="Vaciar carrito"
+        message="¿Estás seguro de que querés eliminar todos los productos del carrito?"
+        variant="danger"
+        confirmLabel="Vaciar carrito"
+      />
     </div>
+  );
+}
+
+function ItemRow({ item }: { item: any }) {
+  const updateFetcher = useFetcher({ key: `cart-upd-${item.productId}` });
+  const removeFetcher = useFetcher({ key: `cart-rm-${item.productId}` });
+  const outOfStock = !item.stock;
+  const syncing = updateFetcher.state !== "idle" || removeFetcher.state !== "idle";
+
+  return (
+    <tr className={`border-b border-slate-200 dark:border-slate-700 ${outOfStock ? "bg-red-50 dark:bg-red-900/20" : ""}`}>
+      <td className="py-3">
+        <div className="flex items-center gap-3">
+          {item.imagen ? (
+            <img
+              src={item.imagen}
+              alt={item.nombre}
+              className="w-12 h-12 rounded object-cover border border-slate-200 dark:border-slate-700 bg-white"
+            />
+          ) : (
+            <div className="w-12 h-12 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+              <ImageOff className="w-5 h-5 text-slate-400" />
+            </div>
+          )}
+          <div>
+            <div className="font-medium text-primary-900 dark:text-primary-100">{item.nombre}</div>
+            {outOfStock && (
+              <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 font-medium mt-0.5">
+                <AlertTriangle className="w-3 h-3" /> Sin stock
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="py-3 text-slate-600 dark:text-slate-400">${item.precio} / {item.unidad}</td>
+      <td className="py-3">
+        <updateFetcher.Form method="post" className="flex items-center gap-1">
+          <input type="hidden" name="_action" value="update" />
+          <input type="hidden" name="productId" value={item.productId} />
+          <input
+            type="number"
+            name="cantidad"
+            min="1"
+            defaultValue={item.cantidad}
+            className="w-16 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-center bg-white dark:bg-slate-800 dark:text-slate-100"
+            onChange={(e) => {
+              const form = e.currentTarget.form;
+              if (form) updateFetcher.submit(new FormData(form), { method: "post" });
+            }}
+          />
+          {updateFetcher.state !== "idle" && <Spinner size={16} />}
+        </updateFetcher.Form>
+      </td>
+      <td className="py-3 font-semibold text-primary-800 dark:text-primary-200">${item.subtotal}</td>
+      <td className="py-3">
+        <removeFetcher.Form method="post">
+          <input type="hidden" name="_action" value="remove" />
+          <input type="hidden" name="productId" value={item.productId} />
+          <button
+            type="submit"
+            disabled={removeFetcher.state !== "idle"}
+            className="text-red-500 hover:text-red-700 text-sm font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+          >
+            {removeFetcher.state !== "idle" ? <Spinner size={16} /> : <Trash2 className="w-4 h-4" />}
+            {syncing ? "" : "Eliminar"}
+          </button>
+        </removeFetcher.Form>
+      </td>
+    </tr>
   );
 }

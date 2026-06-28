@@ -1,4 +1,4 @@
-import { Form, Link, redirect, useActionData } from "react-router";
+import { Link, redirect, useFetcher } from "react-router";
 import type { Route } from "./+types/registrarse";
 import { connectDB } from "~/lib/db.server";
 import User from "~/lib/models/user.server";
@@ -12,6 +12,11 @@ import {
 } from "~/lib/auth.server";
 import bcrypt from "bcryptjs";
 import { useState } from "react";
+import { Button } from "~/components/Button";
+import { Card } from "~/components/Card";
+import { Input } from "~/components/Input";
+import { Spinner } from "~/components/Spinner";
+import { Store, Package } from "lucide-react";
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireGuest(request);
@@ -72,23 +77,25 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "Registrarse - Proveedores App" }];
 }
 
-export default function Registrarse({ actionData }: Route.ComponentProps) {
+export default function Registrarse() {
   const [rol, setRol] = useState("");
+  const fetcher = useFetcher();
+  const loading = fetcher.state !== "idle";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center px-4 py-8">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-amber-900 text-center mb-2">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8">
+      <Card className="w-full max-w-md">
+        <h1 className="text-3xl font-bold text-primary-900 dark:text-primary-100 text-center mb-2">
           Crear Cuenta
         </h1>
-        <p className="text-amber-600 text-center mb-6">
+        <p className="text-slate-600 dark:text-slate-400 text-center mb-6">
           Elegí tu rol y completá tus datos
         </p>
 
-        <Form method="post" className="space-y-4">
-          {actionData?.error && (
-            <p className="bg-red-50 text-red-700 px-4 py-2 rounded-lg text-sm">
-              {actionData.error}
+        <fetcher.Form method="post" className="space-y-4">
+          {fetcher.data?.error && (
+            <p className="bg-red-50 dark:bg-red-900/50 text-red-700 dark:text-red-200 px-4 py-2 rounded-lg text-sm">
+              {fetcher.data.error}
             </p>
           )}
 
@@ -96,91 +103,57 @@ export default function Registrarse({ actionData }: Route.ComponentProps) {
             <button
               type="button"
               onClick={() => setRol("CLIENTE")}
-              className={`flex-1 py-3 px-4 rounded-xl border-2 text-center transition ${
+              className={`flex-1 py-3 px-4 rounded-lg border-2 text-center transition cursor-pointer ${
                 rol === "CLIENTE"
-                  ? "border-amber-700 bg-amber-50 text-amber-900"
-                  : "border-amber-200 text-amber-600 hover:border-amber-300"
+                  ? "border-primary-600 bg-primary-50 dark:bg-primary-900 text-primary-900 dark:text-primary-100"
+                  : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-300 dark:hover:border-primary-700"
               }`}
             >
-              <span className="text-2xl block mb-1">🏪</span>
+              <Store className="w-8 h-8 mx-auto mb-1" />
               <span className="font-medium">Cliente</span>
               <span className="text-xs block mt-1">Bar / Restaurante</span>
             </button>
             <button
               type="button"
               onClick={() => setRol("PROVEEDOR")}
-              className={`flex-1 py-3 px-4 rounded-xl border-2 text-center transition ${
+              className={`flex-1 py-3 px-4 rounded-lg border-2 text-center transition cursor-pointer ${
                 rol === "PROVEEDOR"
-                  ? "border-amber-700 bg-amber-50 text-amber-900"
-                  : "border-amber-200 text-amber-600 hover:border-amber-300"
+                  ? "border-primary-600 bg-primary-50 dark:bg-primary-900 text-primary-900 dark:text-primary-100"
+                  : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-300 dark:hover:border-primary-700"
               }`}
             >
-              <span className="text-2xl block mb-1">📦</span>
+              <Package className="w-8 h-8 mx-auto mb-1" />
               <span className="font-medium">Proveedor</span>
-              <span className="text-xs block mt-1">
-                Distribuidor / Fabricante
-              </span>
+              <span className="text-xs block mt-1">Distribuidor / Fabricante</span>
             </button>
           </div>
 
           <input type="hidden" name="role" value={rol} />
 
-          <div>
-            <label className="block text-sm font-medium text-amber-800 mb-1">
-              Nombre del negocio
-            </label>
-            <input
-              type="text"
-              name="nombre"
-              required
-              className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
-          </div>
+          <Input label="Nombre del negocio" type="text" name="nombre" required />
+          <Input label="Email" type="email" name="email" required />
+          <Input label="Contraseña" type="password" name="password" required minLength={6} />
 
-          <div>
-            <label className="block text-sm font-medium text-amber-800 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              name="email"
-              required
-              className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-amber-800 mb-1">
-              Contraseña
-            </label>
-            <input
-              type="password"
-              name="password"
-              required
-              minLength={6}
-              className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
-          </div>
-
-          <button
+          <Button
             type="submit"
-            disabled={!rol}
-            className="w-full py-3 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!rol || loading}
+            className="w-full py-3"
           >
-            Crear cuenta
-          </button>
-        </Form>
+            {loading ? <Spinner size={20} /> : null}
+            {loading ? "Creando cuenta..." : "Crear cuenta"}
+          </Button>
+        </fetcher.Form>
 
-        <p className="text-center text-amber-600 mt-6">
+        <p className="text-center text-slate-600 dark:text-slate-400 mt-6">
           ¿Ya tenés cuenta?{" "}
           <Link
             to="/iniciar-sesion"
-            className="text-amber-800 font-semibold hover:underline"
+            className="text-primary-600 dark:text-primary-400 font-semibold hover:underline"
           >
             Iniciá sesión
           </Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

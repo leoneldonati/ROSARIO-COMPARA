@@ -64,7 +64,7 @@ export async function requireUser(
     const user = await User.findById(payload._id).select("-password").lean();
     if (!user) throw redirect("/iniciar-sesion");
     if (roles && !roles.includes(user.role)) throw redirect("/dashboard");
-    return user as unknown as SafeUser;
+    return { ...user, _id: user._id.toString() } as unknown as SafeUser;
   } catch {
     throw redirect("/iniciar-sesion");
   }

@@ -5,6 +5,7 @@ import { requireUser } from "~/lib/auth.server";
 import Order from "~/lib/models/order.server";
 import SupplierProfile from "~/lib/models/supplier-profile.server";
 import User from "~/lib/models/user.server";
+import { Badge } from "~/components/Badge";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
@@ -49,12 +50,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { user, orders: ordersConNombres };
 }
 
-const ESTADO_COLORS: Record<string, string> = {
-  pendiente: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmado: "bg-blue-100 text-blue-800 border-blue-300",
-  en_camino: "bg-purple-100 text-purple-800 border-purple-300",
-  entregado: "bg-green-100 text-green-800 border-green-300",
-  cancelado: "bg-red-100 text-red-800 border-red-300",
+const ESTADO_BADGE: Record<string, "accent" | "blue" | "purple" | "green" | "red"> = {
+  pendiente: "accent",
+  confirmado: "blue",
+  en_camino: "purple",
+  entregado: "green",
+  cancelado: "red",
 };
 
 const ESTADO_LABELS: Record<string, string> = {
@@ -74,15 +75,15 @@ export default function Pedidos({ loaderData }: Route.ComponentProps) {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-amber-900 mb-6">Pedidos</h2>
+      <h2 className="text-2xl font-bold text-primary-900 dark:text-primary-100 mb-6">Pedidos</h2>
 
       {orders.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center shadow-md">
-          <p className="text-amber-600 text-lg mb-4">No hay pedidos todavía</p>
+        <div className="bg-primary-50 dark:bg-slate-800 rounded-lg p-12 text-center">
+          <p className="text-slate-600 dark:text-slate-400 text-lg mb-4">No hay pedidos todavía</p>
           {user.role === "CLIENTE" && (
             <Link
               to="/dashboard/buscar"
-              className="inline-block px-6 py-3 bg-amber-700 text-white rounded-xl hover:bg-amber-800 transition font-medium"
+              className="inline-block px-6 py-3 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-medium"
             >
               Buscar productos
             </Link>
@@ -90,8 +91,8 @@ export default function Pedidos({ loaderData }: Route.ComponentProps) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full bg-white rounded-2xl shadow-md overflow-hidden">
-            <thead className="bg-amber-800 text-white">
+          <table className="w-full bg-primary-50 dark:bg-slate-800 rounded-lg overflow-hidden">
+            <thead className="bg-primary-800 dark:bg-primary-900 text-white">
               <tr>
                 <th className="px-4 py-3 text-left">#</th>
                 <th className="px-4 py-3 text-left">Fecha</th>
@@ -110,12 +111,12 @@ export default function Pedidos({ loaderData }: Route.ComponentProps) {
               {orders.map((order: any, i: number) => (
                 <tr
                   key={order._id}
-                  className={i % 2 === 0 ? "bg-amber-50" : "bg-white"}
+                  className={i % 2 === 0 ? "bg-primary-50 dark:bg-slate-800" : "bg-white dark:bg-slate-800/50"}
                 >
-                  <td className="px-4 py-3 font-mono text-sm text-amber-600">
+                  <td className="px-4 py-3 font-mono text-sm text-slate-500 dark:text-slate-400">
                     {order._id.slice(-6)}
                   </td>
-                  <td className="px-4 py-3 text-amber-700 text-sm">
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">
                     {new Date(order.createdAt).toLocaleDateString("es-AR", {
                       day: "2-digit",
                       month: "2-digit",
@@ -125,27 +126,26 @@ export default function Pedidos({ loaderData }: Route.ComponentProps) {
                     })}
                   </td>
                   {user.role === "PROVEEDOR" && (
-                    <td className="px-4 py-3 font-medium text-amber-900">
+                    <td className="px-4 py-3 font-medium text-primary-900 dark:text-primary-100">
                       {order.clienteNombre}
                     </td>
                   )}
                   {user.role === "CLIENTE" && (
-                    <td className="px-4 py-3 font-medium text-amber-900">
+                    <td className="px-4 py-3 font-medium text-primary-900 dark:text-primary-100">
                       {order.proveedorNombre}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-amber-700 text-sm">
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">
                     {order.items.length} producto{order.items.length !== 1 ? "s" : ""}
                   </td>
-                  <td className="px-4 py-3 font-bold text-amber-800">
+                  <td className="px-4 py-3 font-bold text-primary-800 dark:text-primary-200">
                     ${order.total}
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      to={`/dashboard/pedidos/${order._id}`}
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${ESTADO_COLORS[order.estado] || "bg-gray-100"}`}
-                    >
-                      {ESTADO_LABELS[order.estado] || order.estado}
+                    <Link to={`/dashboard/pedidos/${order._id}`}>
+                      <Badge color={ESTADO_BADGE[order.estado] || "primary"}>
+                        {ESTADO_LABELS[order.estado] || order.estado}
+                      </Badge>
                     </Link>
                   </td>
                 </tr>

@@ -1,9 +1,13 @@
-import { Form, redirect, useActionData, useLoaderData } from "react-router";
+import { redirect, useFetcher, useLoaderData } from "react-router";
 import type { Route } from "./+types/dashboard.productos.nuevo";
 import { connectDB } from "~/lib/db.server";
 import { requireUser } from "~/lib/auth.server";
 import SupplierProfile from "~/lib/models/supplier-profile.server";
 import Product from "~/lib/models/product.server";
+import { Button } from "~/components/Button";
+import { Card } from "~/components/Card";
+import { Input, Textarea } from "~/components/Input";
+import { Spinner } from "~/components/Spinner";
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireUser(request, ["PROVEEDOR"]);
@@ -42,76 +46,48 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "Nuevo Producto - Proveedores App" }];
 }
 
-export default function NuevoProducto({ actionData }: Route.ComponentProps) {
+export default function NuevoProducto() {
+  const fetcher = useFetcher();
+  const loading = fetcher.state !== "idle";
+
   return (
     <div className="max-w-2xl">
-      <h2 className="text-2xl font-bold text-amber-900 mb-6">Nuevo Producto</h2>
-      <Form method="post" className="space-y-4">
-        {actionData?.error && (
-          <p className="bg-red-50 text-red-700 px-4 py-2 rounded-lg text-sm">{actionData.error}</p>
-        )}
+      <h2 className="text-2xl font-bold text-primary-900 dark:text-primary-100 mb-6">Nuevo Producto</h2>
+      <Card>
+        <fetcher.Form method="post" className="space-y-4">
+          {fetcher.data?.error && (
+            <p className="bg-red-50 dark:bg-red-900/50 text-red-700 dark:text-red-200 px-4 py-2 rounded-lg text-sm">
+              {fetcher.data.error}
+            </p>
+          )}
 
-        <div>
-          <label className="block text-sm font-medium text-amber-800 mb-1">Nombre del producto</label>
-          <input
-            type="text"
-            name="nombre"
-            required
-            className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-          />
-        </div>
+          <Input label="Nombre del producto" name="nombre" required />
+          <Input label="Categoría" name="categoria" placeholder="Ej: Lácteos, Carnes, Bebidas" />
 
-        <div>
-          <label className="block text-sm font-medium text-amber-800 mb-1">Categoría</label>
-          <input
-            type="text"
-            name="categoria"
-            placeholder="Ej: Lácteos, Carnes, Bebidas"
-            className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-amber-800 mb-1">Precio ($)</label>
-            <input
-              type="number"
-              step="0.01"
-              name="precio"
-              required
-              className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input label="Precio ($)" type="number" step="0.01" name="precio" required />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Unidad</label>
+              <select
+                name="unidad"
+                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-slate-800 dark:text-slate-100 transition"
+              >
+                <option value="kg">kg</option>
+                <option value="unidad">unidad</option>
+                <option value="litro">litro</option>
+                <option value="docena">docena</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-amber-800 mb-1">Unidad</label>
-            <select
-              name="unidad"
-              className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-              <option value="kg">kg</option>
-              <option value="unidad">unidad</option>
-              <option value="litro">litro</option>
-              <option value="docena">docena</option>
-            </select>
-          </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-amber-800 mb-1">Descripción</label>
-          <textarea
-            name="descripcion"
-            rows={3}
-            className="w-full px-4 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-          />
-        </div>
+          <Textarea label="Descripción" name="descripcion" rows={3} />
 
-        <button
-          type="submit"
-          className="px-6 py-3 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition font-medium"
-        >
-          Crear Producto
-        </button>
-      </Form>
+          <Button type="submit" disabled={loading}>
+            {loading ? <Spinner size={20} /> : null}
+            {loading ? "Creando..." : "Crear Producto"}
+          </Button>
+        </fetcher.Form>
+      </Card>
     </div>
   );
 }
